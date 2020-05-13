@@ -1,4 +1,4 @@
-import {observable, observableArray, computed, pureComputed, components, bindingHandlers} from 'knockout'
+import {observable, observableArray, computed, pureComputed, components, bindingHandlers, unwrap} from 'knockout'
 import * as ko from 'knockout';
 
 //export type Observable<T> = T extends any[] ? KnockoutObservableArray<T[number]> : T extends boolean ? KnockoutObservable<boolean> : KnockoutObservable<T>;
@@ -7,7 +7,7 @@ export type ObservableArr<T> = KnockoutObservableArray<T>;
 export type Derived<T> = KnockoutReadonlyObservable<T>;
 export type PossiblyObservable<T> = T | KnockoutSubscribable<T>;
 
-export {observable, observableArray, computed}
+export {observable, observableArray, computed, unwrap}
 
 export const pure = pureComputed;
 

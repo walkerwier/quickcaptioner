@@ -1,22 +1,13 @@
-import {Observable, observable, observableArray, computed, pure} from './shortcuts'
+import {Observable, observable, observableArray, computed, pure, unwrap} from './shortcuts'
 import mapValues from 'lodash-es/mapValues'
+import defaults from 'lodash-es/defaults'
 
-interface Settings {
-    maxLength: number;
-    softMinimum: number;
-    prepositions: string[];
-    alwaysBreakBefore: string[];
-    alwaysBreakAfter: string[];
-    preferBreakBefore: string[];
-    preferBreakAfter: string[];
-    exceptions: string[];
-    nonSpaceBreakPoints: string[];
-}
-
-let defaultSettings: Settings = {
+let defaultSettings = {
     maxLength: 32,
-    softMinimum: 25,
-    prepositions: [
+    preferCutoff: 25,
+    prepositionCutoff: 25,
+    hyhpenCutoff: 25,
+    'Prepositions': [
         'of',
         'at',
         'to',
@@ -28,31 +19,53 @@ let defaultSettings: Settings = {
         'an',
         'the'
     ],
-    alwaysBreakBefore: [
+    'Always Break Before': [
         '>>'
     ],
-    alwaysBreakAfter: [
+    'Always Break After': [
         '.',
         '?',
         '!'
     ],
-    preferBreakBefore: [
+    'Prefer Break Before': [
     ],
-    preferBreakAfter: [
+    'Prefer Break After': [
         ',',
         '--',
         '...'
     ],
-    exceptions: [
+    'Exceptions': [
         'Dr.', 'Mrs.', 'Ms.', 'Mr.', 'Ph.D.', 'PhD.', 'Ph.D', '...'
     ],
-    nonSpaceBreakPoints: [
+    'Non-space Breakpoints': [
         '-'
     ]
 };
 
-type ObservableSettings = {
-    [P in keyof Settings]: Observable<Settings[P]>
-}
+let savedSettings = localStorage['settings'];
+savedSettings = savedSettings ? JSON.parse(savedSettings) : {};
+let settings = defaults(savedSettings, defaultSettings);
 
-let observableSettings: ObservableSettings = mapValues(defaultSettings, observable);
+export let observableSettings = mapValues(settings, observable);
+observableSettings.maxLength.subscribe((len) => {
+    if (parseInt(observableSettings.preferCutoff()) > parseInt(len)) {
+        observableSettings.preferCutoff(len);
+    }
+    if (parseInt(observableSettings.prepositionCutoff()) > parseInt(len)) {
+        observableSettings.prepositionCutoff(len);
+    }
+    if (parseInt(observableSettings.hyhpenCutoff()) > parseInt(len)) {
+        observableSettings.hyhpenCutoff(len);
+    }
+});
+export let resolvedSettings = computed(()=>mapValues(observableSettings, unwrap));
+
+resolvedSettings.subscribe((settings) => {
+    localStorage['settings'] = JSON.stringify(settings);
+});
+
+export let resetSettings = () => {
+    mapValues(defaultSettings, (val, name) => {
+        observableSettings[name](val);
+    });
+}

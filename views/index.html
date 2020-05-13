@@ -5,26 +5,41 @@
         <link rel="stylesheet" type="text/css" href="style.css" />
     </head>
     <body>
-        <div id="top-bar">
-            Max: <input type="number" data-bind="textInput: maxLength" />
-            Preferred min: <input type="number" data-bind="textInput: softMinimum" />
+        <div id="top-bar" data-bind="with: settings">
+            Max: <input type="number" data-bind="textInput: maxLength" min="5" />
+            "Prefer" rules cutoff: <input type="number" data-bind="textInput: preferCutoff, attr: {max: maxLength}" min="0"/>
+            Prepositions cutoff: <input type="number" data-bind="textInput: prepositionCutoff, attr: {max: maxLength}" min="0"/>
+            Hyphen cutoff: <input type="number" data-bind="textInput: hyhpenCutoff, attr: {max: maxLength}" min="0"/>
+            <button data-bind="click: $root.resetSettings">Reset Settings</button>
         </div>
-        <div id="main">
-            <div id="original">
-                <textarea data-bind="textInput: inputText"></textarea>
+        <div id="settings-container">
+            <div id="main">
+                <div id="original">
+                    <textarea data-bind="textInput: inputText"></textarea>
+                </div>
+                <div id="result">
+                    <div class="inner">
+                        <div class="grow">
+                            <div class="guideline red" data-bind="style: {left: '' + settings.preferCutoff() + 'ch'}"></div>
+                            <div class="guideline blue" data-bind="style: {left: '' + settings.prepositionCutoff() + 'ch'}"></div>
+                            <div class="guideline green" data-bind="style: {left: '' + settings.hyhpenCutoff() + 'ch'}"></div>
+                            <div class="guideline" data-bind="style: {left: '' + settings.maxLength() + 'ch'}"></div>
+                            <table>
+                                <tbody data-bind="foreach: result">
+                                    <tr>
+                                        <td data-bind="text: $data"></td>
+                                        <td data-bind="text: $data.length"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div id="result">
-                <div class="inner">
-                    <div class="guideline" data-bind="style: {left: '' + softMinimum() + 'ch'}"></div>
-                    <div class="guideline" data-bind="style: {left: '' + maxLength() + 'ch'}"></div>
-                    <table>
-                        <tbody data-bind="foreach: result">
-                            <tr>
-                                <td data-bind="text: $data"></td>
-                                <td data-bind="text: $data.length"></td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <div id="settings" data-bind="foreach: lists">
+                <div>
+                    <textarea data-bind="textInput: list"></textarea>
+                    <label data-bind="text: label"></label>
                 </div>
             </div>
         </div>

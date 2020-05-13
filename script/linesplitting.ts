@@ -1,197 +1,58 @@
-import {Observable, observable, observableArray, computed, pure} from './shortcuts'
-
-
-/*** Setup ***/
-const maxLength = 32;
-const ignorePrepositionsLength = 25;
-const prepositions = [
-    'of',
-    'at',
-    'to',
-    'in',
-    'with',
-    'without',
-    'into',
-    'a', // okay, articles aren't prepositions, but we treat them the same
-    'an',
-    'the'
-];
-const endingPunctuation = [
-    '.',
-    ',',
-    ']',
-    ';',
-    ':',
-    '+++',
-    '--',
-    '!',
-    '?',
-    '?"',
-    '."',
-    '!"',
-    '”',
-    "'"
-];
-const noSpaceRequiredEndingPunctuation = [
-    '-'
-];
-const periodSubstitutions = [
-    'Dr.', 'Mrs.', 'Ms.', 'Mr.', 'Ph.D.', 'PhD.', 'Ph.D', '...'
-];
-
-/*** End Setup ***/
-
+import { start } from "repl";
 
 let regexEscape = (str) => {
     return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
 }
+let isWhitespace = char => !!char.match(/\s/);
 
-let endsWithRegex = (possibleEndings: string[]) => {
-    return new RegExp('(' + possibleEndings.map(regexEscape).join('|') + ')$');
-}
-
-let endsWithWordRegex = (possibleEndings: string[]) => {
-    return new RegExp('\\b(' + possibleEndings.map(regexEscape).join('|') + ')$');
-}
+type LineSplitter = (input: string) => string[];
 
 
-type LineSplitter = (input: string, settings: object) => string[];
+let maxLength, preferCutoff, prepositionCutoff, hyhpenCutoff, longestStartToken;
+let mustBreakBefore, shouldBreakBefore, mustBreakAfter, shouldBreakAfter, shouldntBreakAfter, isHyphenEquivalent;
 
-let superSimpleSplitLines: LineSplitter = (input) => {
-    var regex = /(.{25,32})\s(?=(?:of|a|the|at|to|in)\s)|(.{1,32})\s/g;
-    return (input + ' ').match(regex);
+export let setSettings = (settings) => {
+    maxLength = parseInt(settings.maxLength);
+    preferCutoff = parseInt(settings.preferCutoff);
+    prepositionCutoff = parseInt(settings.prepositionCutoff);
+    hyhpenCutoff = parseInt(settings.hyhpenCutoff);
+    let alwaysBreakAfter = settings['Always Break After'];
+    let alwaysBreakBefore = settings['Always Break Before'];
+    let preferBreakBefore = settings['Prefer Break Before'];
+    let preferBreakAfter = settings['Prefer Break After'];
+    let prepositions = settings['Prepositions'];
+    let exceptions = settings['Exceptions'];
+    let hyphenEquivalents = settings['Non-space Breakpoints'];
+
+    /*** Token lists ***/
+    let longestToShortest = (a, b) => b.length - a.length;
+    let endTokens = alwaysBreakAfter.concat(preferBreakAfter, exceptions).sort(longestToShortest);
+    endTokens = prepositions.map(regexEscape).map(x => '\\b' + x).concat(endTokens.map(regexEscape));
+    let endTokenRegex = new RegExp('(' + endTokens.join('|') + ')$', 'i');
+    let startTokens = alwaysBreakBefore.concat(preferBreakBefore, exceptions).sort(longestToShortest).map(regexEscape);
+    let startTokenRegex = new RegExp('^(' + startTokens.join('|') + ')', 'i');
+    longestStartToken = (startTokens[0] || '').length;
+
+
+    /*** Helper functions ***/
+    let getEndToken = str => {
+        let result = endTokenRegex.exec(str);
+        return result && result[0];
+    }
+    let getStartToken = str => {
+        let result = startTokenRegex.exec(str);
+        return result && result[0];
+    }
+    mustBreakBefore = str => alwaysBreakBefore.indexOf(getStartToken(str)) > -1;
+    shouldBreakBefore = str => preferBreakBefore.indexOf(getStartToken(str)) > -1;
+    mustBreakAfter = str => alwaysBreakAfter.indexOf(getEndToken(str)) > -1;
+    shouldBreakAfter = str => preferBreakAfter.indexOf(getEndToken(str)) > -1;
+    shouldntBreakAfter = str => prepositions.indexOf(getEndToken(str)) > -1;
+    isHyphenEquivalent = str => hyphenEquivalents.indexOf(str) > -1;
 };
 
 
-let preprocess = (str: string) => {
-    str = str.trim();
-    str = str.replace(/\s+/g, " ");
-    for (let i=0; i<periodSubstitutions.length; i++) {
-        let item = periodSubstitutions[i];
-        let replacement = item.replace(/\./g, '+');
-        let itemRegex = new RegExp(regexEscape(item), 'g');
-        str = str.replace(itemRegex, replacement);
-    }
-    return str;
-}
-
-let postprocess = (str: string) => {
-    str = str.trim();
-    for (let i=0; i<periodSubstitutions.length; i++) {
-        let item = periodSubstitutions[i];
-        let replacement = item.replace(/\./g, '+');
-        let reverseRegex = new RegExp(regexEscape(replacement), 'g');
-        str = str.replace(reverseRegex, item);
-    }
-    return str;
-}
-
-
-let specSplitLines: LineSplitter = (input) => {
-    let endsWithPreposition = endsWithWordRegex(prepositions);
-    let endsWithPunctuation = endsWithRegex(endingPunctuation.concat(noSpaceRequiredEndingPunctuation));
-    let endsWithHyphen = endsWithRegex(noSpaceRequiredEndingPunctuation);
-
-    input = preprocess(input);
-    let results = [];
-    let startPos = 0;
-    let addResult = (result: string) => {
-        results.push(postprocess(result));
-        startPos += result.length;
-    };
-    while (startPos < input.length) {
-        if (input.length - startPos < maxLength) {
-            // last line
-            addResult(input.substr(startPos));
-            break;
-        }
-        // if our line would start with whitespace, just move to the next character
-        if (input[startPos].match(/\s/)) {
-            startPos++;
-            continue;
-        }
-        let len = maxLength + 1;
-        let result = null;
-        let fallbackResult = null;
-        while (len > 0 && !result) {
-            if (len < ignorePrepositionsLength) {
-                result = fallbackResult;
-                break;
-            }
-            let finalChar = input[startPos + len - 1];
-            if (finalChar.match(/\s/)) {
-                // we're at a space
-                let restOfLine = input.substr(startPos, len - 1);
-                if (restOfLine.match(endsWithPunctuation) || !restOfLine.match(endsWithPreposition)) {
-                    result = restOfLine + ' ';
-                } else {
-                    //if (!fallbackResult)
-                    fallbackResult = restOfLine + ' ';
-                }
-            } else if (len <= maxLength) {
-                let line = input.substr(startPos, len);
-                if (line.match(endsWithHyphen)) {
-                    result = line;
-                }
-            }
-            len--;
-        }
-        if (result) {
-            addResult(result);
-        } else {
-            // last resort: just make a line of maximum length ending with a hyphen
-            results.push(postprocess(input.substr(startPos, maxLength-1) + '-'));
-            startPos += maxLength - 1;
-        }
-    }
-    return results;
-}
-
-
-const alwaysBreakBefore = [
-    '>>'
-];
-const alwaysBreakAfter = [
-    '.',
-    '?',
-    '!'
-];
-const preferBreakBefore = [
-];
-const preferBreakAfter = [
-    ',',
-    '--',
-    '...'
-];
-
-/*** Token lists ***/
-let longestToShortest = (a, b) => b.length - a.length;
-let endTokens = alwaysBreakAfter.concat(preferBreakAfter, periodSubstitutions).sort(longestToShortest);
-endTokens = prepositions.map(regexEscape).map(x => '\\b' + x).concat(endTokens.map(regexEscape));
-let endTokenRegex = new RegExp('(' + endTokens.join('|') + ')$', 'i');
-let startTokens = alwaysBreakAfter.concat(preferBreakBefore, periodSubstitutions).sort(longestToShortest).map(regexEscape);
-let startTokenRegex = new RegExp('^(' + startTokens.join('|') + ')', 'i');
-let longestStartToken = startTokens[0].length;
-
-/*** Helper functions ***/
-let isWhitespace = char => !!char.match(/\s/);
-let getEndToken = str => {
-    let result = endTokenRegex.exec(str);
-    return result && result[0];
-}
-let getStartToken = str => {
-    let result = startTokenRegex.exec(str);
-    return result && result[0];
-}
-let mustBreakBefore = str => alwaysBreakBefore.indexOf(getStartToken(str)) > -1;
-let shouldBreakBefore = str => preferBreakBefore.indexOf(getStartToken(str)) > -1;
-let mustBreakAfter = str => alwaysBreakAfter.indexOf(getEndToken(str)) > -1;
-let shouldBreakAfter = str => preferBreakAfter.indexOf(getEndToken(str)) > -1;
-let shouldntBreakAfter = str => prepositions.indexOf(getEndToken(str)) > -1;
-
-let betterSplitLines: LineSplitter = (input, settings) => {
-    let maxLength = settings['maxLength'];
-    let ignorePrepositionsLength = settings['softMinimum'];
+let betterSplitLines: LineSplitter = (input) => {
     input = input.trim().replace(/\s+/g, " ");
     let results = [];
     let startPos = 0;
@@ -211,33 +72,47 @@ let betterSplitLines: LineSplitter = (input, settings) => {
             let char = input[startPos + len];
             if(isWhitespace(char)) {
                 let strBefore = sample.substr(0, len);
-                let strAfter = sample.substr(len);
+                let strAfter = sample.substr(len + 1);
                 if (mustBreakAfter(strBefore) || mustBreakBefore(strAfter)) {
                     candidate = strBefore;
                     break;
                 }
-                if (len <= ignorePrepositionsLength) {
+                if ((len < preferCutoff) && (len < prepositionCutoff)) {
                     candidate = strBefore;
                     continue;
                 }
-                if (shouldBreakAfter(strBefore) || shouldBreakBefore(strAfter)) {
+                if ((len >= preferCutoff) && (shouldBreakAfter(strBefore) || shouldBreakBefore(strAfter))) {
                     candidate = strBefore;
                     goodCandidate = true;
                     continue;
                 }
-                if (!goodCandidate && !shouldntBreakAfter(strBefore)) {
+                if (goodCandidate) {
+                    continue;
+                }
+                if (candidate.length < prepositionCutoff) {
+                    candidate = strBefore;
+                    continue;
+                }
+                if (!shouldntBreakAfter(strBefore)) {
                     candidate = strBefore;
                 }
                 if (!candidate) {
                     candidate = strBefore;
                 }
+            } else if (
+                isHyphenEquivalent(char) &&
+                (len < maxLength) &&
+                (candidate.length < hyhpenCutoff) &&
+                !goodCandidate
+            ) {
+                candidate = sample.substr(0, len+1);
             }
         }
         if (candidate) {
             results.push(candidate.trim());
             startPos += candidate.length;
         } else {
-            results.push(sample.substr(0, maxLength - 1) + '-')
+            results.push(sample.substr(0, maxLength - 1) + '-');
             startPos += maxLength;
         }
     }
