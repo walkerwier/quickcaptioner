@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Caption Test</title>
+        <link rel="stylesheet" type="text/css" href="style.css" />
+    </head>
+    <body>
+        <div id="top-bar">
+            Max: <input type="number" data-bind="textInput: maxLength" />
+            Preferred min: <input type="number" data-bind="textInput: softMinimum" />
+        </div>
+        <div id="main">
+            <div id="original">
+                <textarea data-bind="textInput: inputText"></textarea>
+            </div>
+            <div id="result">
+                <div class="inner">
+                    <div class="guideline" data-bind="style: {left: '' + softMinimum() + 'ch'}"></div>
+                    <div class="guideline" data-bind="style: {left: '' + maxLength() + 'ch'}"></div>
+                    <table>
+                        <tbody data-bind="foreach: result">
+                            <tr>
+                                <td data-bind="text: $data"></td>
+                                <td data-bind="text: $data.length"></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript" src="main.js"></script>
+    </body>
+</html>
+

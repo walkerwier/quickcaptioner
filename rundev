@@ -1,0 +1,5 @@
+#!/bin/bash
+SCRIPTPATH=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+cd "$SCRIPTPATH"
+trap "trap - SIGTERM && kill -- -$$" SIGINT SIGTERM EXIT
+node '/Users/jwwier/Documents/Project Repos/Webpack Projects/node_modules/webpack-dev-server/bin/webpack-dev-server.js'
