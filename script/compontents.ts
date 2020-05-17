@@ -17,7 +17,7 @@ export class Component {
     }
 }
 
-class SimpleBinding<T> {
+export class SimpleBinding<T> {
     value: T;
     element: HTMLElement;
     constructor (value: T, element: HTMLElement) {

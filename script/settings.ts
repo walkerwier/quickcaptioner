@@ -31,11 +31,10 @@ let defaultSettings = {
     ],
     'Prefer Break After': [
         ',',
-        '--',
-        '...'
+        '--'
     ],
     'Exceptions': [
-        'Dr.', 'Mrs.', 'Ms.', 'Mr.', 'Ph.D.', 'PhD.', 'Ph.D', '...'
+        ' Dr.', ' Mrs.', ' Ms.', ' Mr.', ' Ph.D.', ' PhD.', ' Ph.D', '...'
     ],
     'Non-space Breakpoints': [
         '-'

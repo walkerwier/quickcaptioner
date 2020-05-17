@@ -7,8 +7,7 @@ let isWhitespace = char => !!char.match(/\s/);
 
 type LineSplitter = (input: string) => string[];
 
-
-let maxLength, preferCutoff, prepositionCutoff, hyhpenCutoff, longestStartToken;
+let maxLength, preferCutoff, prepositionCutoff, hyhpenCutoff, longestToken;
 let mustBreakBefore, shouldBreakBefore, mustBreakAfter, shouldBreakAfter, shouldntBreakAfter, isHyphenEquivalent;
 
 export let setSettings = (settings) => {
@@ -25,14 +24,39 @@ export let setSettings = (settings) => {
     let hyphenEquivalents = settings['Non-space Breakpoints'];
 
     /*** Token lists ***/
-    let longestToShortest = (a, b) => b.length - a.length;
-    let endTokens = alwaysBreakAfter.concat(preferBreakAfter, exceptions).sort(longestToShortest);
-    endTokens = prepositions.map(regexEscape).map(x => '\\b' + x).concat(endTokens.map(regexEscape));
-    let endTokenRegex = new RegExp('(' + endTokens.join('|') + ')$', 'i');
-    let startTokens = alwaysBreakBefore.concat(preferBreakBefore, exceptions).sort(longestToShortest).map(regexEscape);
-    let startTokenRegex = new RegExp('^(' + startTokens.join('|') + ')', 'i');
-    longestStartToken = (startTokens[0] || '').length;
+    // let longestToShortest = (a, b) => b.length - a.length;
+    // let endTokens = alwaysBreakAfter.concat(preferBreakAfter, exceptions).sort(longestToShortest);
+    // endTokens = prepositions.map(regexEscape).map(x => '\\b' + x).concat(endTokens.map(regexEscape));
+    // let endTokenRegex = new RegExp('(' + endTokens.join('|') + ')$', 'i');
+    // let startTokens = alwaysBreakBefore.concat(preferBreakBefore, exceptions).sort(longestToShortest).map(regexEscape);
+    // let startTokenRegex = new RegExp('^(' + startTokens.join('|') + ')', 'i');
+    // longestStartToken = (startTokens[0] || '').length;
 
+    let tokens = [];
+    let addTokens = list => {
+        list.forEach(item => {
+            tokens.push({
+                str: item,
+                regex: regexEscape(item)
+            });
+        });
+    }
+    addTokens(alwaysBreakBefore);
+    addTokens(alwaysBreakAfter);
+    addTokens(preferBreakBefore);
+    addTokens(preferBreakAfter);
+    addTokens(exceptions);
+    // prepositions are a little different
+    prepositions.forEach(item => {
+        tokens.push({
+            str: item,
+            regex: '\\b' + regexEscape(item)
+        });
+    });
+    tokens.sort((a, b) => b.str.length - a.str.length)
+    longestToken = tokens[0].str.length;
+    let startTokenRegex = new RegExp('^(' + tokens.map(x => x.regex).join('|') + ')', 'i');
+    let endTokenRegex = new RegExp('(' + tokens.map(x => x.regex).join('|') + ')$', 'i');
 
     /*** Helper functions ***/
     let getEndToken = str => {
@@ -60,7 +84,7 @@ let betterSplitLines: LineSplitter = (input) => {
         while (isWhitespace(input[startPos])) {
             startPos++;
         }
-        let sample = input.substr(startPos, maxLength + longestStartToken);
+        let sample = input.substr(startPos, maxLength + longestToken);
         let len = 0;
         let candidate = "";
         let goodCandidate = false;
