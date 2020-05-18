@@ -1,11 +1,14 @@
-import { start } from "repl";
+//import flatten from 'lodash-es/flatten';
+
+
+let placeholderChar = String.fromCharCode(314159);
 
 let regexEscape = (str) => {
     return str.replace(/[.*+\-?^${}()|[\]\\]/g, '\\$&');
 }
 let isWhitespace = char => !!char.match(/\s/);
 
-type LineSplitter = (input: string) => string[];
+type LineSplitter = (input: string) => string[][];
 
 let maxLength, preferCutoff, prepositionCutoff, hyhpenCutoff, longestToken;
 let mustBreakBefore, shouldBreakBefore, mustBreakAfter, shouldBreakAfter, shouldntBreakAfter, isHyphenEquivalent;
@@ -77,8 +80,11 @@ export let setSettings = (settings) => {
 
 
 let betterSplitLines: LineSplitter = (input) => {
-    input = input.trim().replace(/\s+/g, " ");
-    let results = [];
+    input = input.trim();
+    input = input.replace(/\s*(\n{3,}|(\r\n){3,})\s*/g, placeholderChar);
+    input = input.replace(/\s+/g, " ");
+    let paragraphs: string[][] = [];
+    let paragraph: string[] = [];
     let startPos = 0;
     while (startPos < input.length) {
         while (isWhitespace(input[startPos])) {
@@ -88,17 +94,25 @@ let betterSplitLines: LineSplitter = (input) => {
         let len = 0;
         let candidate = "";
         let goodCandidate = false;
+        let hardBreak = false;
         while (++len <= maxLength) {
             if (startPos + len >= input.length) {
                 candidate = sample;
                 break;
             }
             let char = input[startPos + len];
+            if (char === placeholderChar) {
+                candidate = sample.substr(0, len);
+                hardBreak = true;
+                startPos++;
+                break;
+            }
             if(isWhitespace(char)) {
                 let strBefore = sample.substr(0, len);
                 let strAfter = sample.substr(len + 1);
                 if (mustBreakAfter(strBefore) || mustBreakBefore(strAfter)) {
                     candidate = strBefore;
+                    hardBreak = true;
                     break;
                 }
                 if ((len < preferCutoff) && (len < prepositionCutoff)) {
@@ -133,14 +147,20 @@ let betterSplitLines: LineSplitter = (input) => {
             }
         }
         if (candidate) {
-            results.push(candidate.trim());
+            paragraph.push(candidate.trim());
+            //if (hardBreak && paragraphs.length % 2) paragraphs.push('');
+            if (hardBreak) {
+                paragraphs.push(paragraph);
+                paragraph = [];
+            }
             startPos += candidate.length;
         } else {
-            results.push(sample.substr(0, maxLength - 1) + '-');
+            paragraph.push(sample.substr(0, maxLength - 1) + '-');
             startPos += maxLength;
         }
     }
-    return results;
+    paragraphs.push(paragraph);
+    return paragraphs;
 }
 
 

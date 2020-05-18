@@ -4,12 +4,15 @@ import {observableSettings, resolvedSettings, resetSettings as _resetSettings} f
 import {SimpleBinding} from './compontents'
 import map from 'lodash-es/map'
 import isArray from 'lodash-es/isArray'
+import flatten from 'lodash-es/flatten';
 
 setSettings(resolvedSettings());
 
 let proofMode = observable(false);
 
 let inputText: Observable<string> = observable('');
+let unproofedOutput: string[][] = [];
+let proofedOutput: string[][] = [];
 let result: ObservableArr<string> = observableArray();
 
 let settingsResetCounter = observable(0);
@@ -22,8 +25,28 @@ function resetSettings() {
     settingsResetCounter(settingsResetCounter()+1);
 }
 
+class Line {
+    text: string = '';
+    hardBreakAfter: boolean = false;
+}
+
+function flattenParagraphList(paragraphs: string[][], startIndex=0) : string[] {
+    let result = [];
+    for (let i=0; i<paragraphs.length; i++) {
+        let paragraph = paragraphs[i];
+        result.push.apply(result, paragraph);
+        if ((result.length + startIndex) % 2) {
+            result.push('');
+        }
+    }
+    return result;
+}
+
+
+
 function doSplit() {
-    result(splitLines(inputText()));
+    unproofedOutput = splitLines(inputText());
+    result(flattenParagraphList(unproofedOutput));
 }
 inputText.subscribe(doSplit);
 
@@ -32,6 +55,7 @@ let cursorPosition = observable(1);
 let reflowSetting = observable(false);
 
 function enterProofMode() {
+    proofedOutput = unproofedOutput;
     if (result().length < 1) {
         cursorPosition(0);
     }
@@ -39,11 +63,175 @@ function enterProofMode() {
 }
 
 function discardEdits() {
-    doSplit();
+    result(flattenParagraphList(unproofedOutput));
     proofMode(false);
     cursorPosition(1);
 }
 
+function proofOutputUpdated() {
+    result(flattenParagraphList(proofedOutput));
+}
+
+function splitOnePara(text) {
+    return splitLines(text)[0];
+}
+
+class LineIndex {
+    para: number;
+    line: number;
+    constructor(para, line) {
+        this.para = para;
+        this.line = line;
+    }
+}
+
+function getLineIndex(lineNum: number) {
+    let x=0;
+    let paragraph = [];
+    let i, j;
+    loop_i: for (i=0; i<proofedOutput.length; i++) {
+        paragraph = flattenParagraphList([proofedOutput[i]], x);
+        for (j=0; j<paragraph.length; j++) {
+            if (x === lineNum) break loop_i;
+            x++;
+        }
+    }
+    return new LineIndex(i, j);
+}
+
+function getLineFromIndex(index: LineIndex) {
+    return proofedOutput[index.para][index.line];
+}
+
+function getLine(lineNum: number) {
+    let index = getLineIndex(lineNum);
+    return proofedOutput[index.para][index.line];
+}
+function setLine(lineNum: number, content) {
+    let index = getLineIndex(lineNum);
+    proofedOutput[index.para][index.line] = content;
+    //proofOutputUpdated();
+}
+
+class StagedLine {
+    index: LineIndex;
+    text: string;
+    constructor(index, text) {
+        this.index = index;
+        this.text = text;
+    }
+    commit() {
+        proofedOutput[this.index.para][this.index.line] = this.text;
+    }
+}
+
+class StagedReflow {
+    startIndex: LineIndex;
+    firstLineText: string;
+    constructor(startIndex, text) {
+        this.startIndex = startIndex;
+        this.firstLineText = text;
+    }
+    commit() {
+        //let para = proofedOutput[this.startIndex.para].slice(0, this.startIndex.line);
+        let para = proofedOutput[this.startIndex.para].slice();
+        let modifiedLines = para.splice(this.startIndex.line);
+        modifiedLines[0] = this.firstLineText;
+        proofedOutput[this.startIndex.para] = para.concat(splitOnePara(modifiedLines.join(' ')));
+    }
+}
+
+class StagedChange {
+    actions: (StagedLine|StagedReflow)[] = [];
+    stageLine(index, text) {
+        this.actions.push(new StagedLine(index, text));
+    }
+    stageReflow(index, text) {
+        this.actions.push(new StagedReflow(index, text));
+    }
+    commit() {
+        this.actions.forEach(x => x.commit());
+        proofOutputUpdated();
+    }
+}
+
+class StagedMoveWord extends StagedChange {
+    index1: LineIndex;
+    index2: LineIndex;
+    line1: string;
+    line2: string;
+    max: number;
+    init() {
+        let pos = cursorPosition();
+        if (pos <= 0 || pos >= result().length) {
+            throw 'Cursor at end';
+        }
+        this.index1 = getLineIndex(pos - 1);
+        this.index2 = getLineIndex(pos);
+        this.line1 = getLineFromIndex(this.index1);
+        this.line2 = getLineFromIndex(this.index2);
+    }
+    initAsMoveDown(reflow: boolean) {
+        this.init();
+        let words = this.line1.split(' ').filter(x=>x);
+        let lastWord = words.pop();
+        if (!lastWord) {
+            throw 'Source line empty';
+        }
+        let newLine2 = lastWord + ' ' + this.line2;
+        if (!reflow && (newLine2.length > this.max)) {
+            throw 'Would make destination line too long'
+        }
+        this.stageLine(this.index1, words.join(' '));
+        if (reflow) {
+            this.stageReflow(this.index2, newLine2);
+        } else {
+            this.stageLine(this.index2, newLine2);
+        }
+    }
+    initAsMoveUp(reflow: boolean) {
+        this.init();
+        let words = this.line2.split(' ').filter(x=>x);
+        let firstWord = words.shift();
+        if (!firstWord) {
+            throw 'Source line empty';
+        }
+        let newLine1 = this.line1 + ' ' + firstWord;
+        if (newLine1.length > this.max) {
+            throw 'Would make destination line too long'
+        }
+        this.stageLine(this.index1, newLine1);
+        if (reflow) {
+            this.stageReflow(this.index2, words.join(' '));
+        } else {
+            this.stageLine(this.index2, words.join(' '));
+        }
+    }
+    static moveUp(reflow: boolean) {
+        try {
+            let move = new StagedMoveWord();
+            move.initAsMoveUp(reflow);
+            return move;
+        } catch {
+            return null;
+        }
+    }
+    static moveDown(reflow: boolean) {
+        try {
+            let move = new StagedMoveWord();
+            move.initAsMoveDown(reflow);
+            return move;
+        } catch {
+            return null;
+        }
+    }
+}
+
+
+function newMoveWordDown(reflow: boolean) {
+    let pos = cursorPosition();
+    if (pos <= 0 || pos >= result().length) return;
+}
 
 function moveWordDown() {
     let pos = cursorPosition();
@@ -52,8 +240,9 @@ function moveWordDown() {
     let after = before.splice(pos);
     let lineFrom = before.pop();
     let lineTo = after.shift();
-    let words = lineFrom.split(' ');
+    let words = lineFrom.split(' ').filter(x=>x);
     let lastWord = words.pop();
+    if (!lastWord) return;
     let newLine2 = lastWord + ' ' + lineTo;
     if (newLine2.length > parseInt(observableSettings.maxLength())) return;
     let newLine1 = words.join(' ')
@@ -67,8 +256,9 @@ function moveWordUp() {
     let after = before.splice(pos);
     let lineFrom = after.shift();
     let lineTo = before.pop();
-    let words = lineFrom.split(' ');
+    let words = lineFrom.split(' ').filter(x=>x);
     let firstWord = words.shift();
+    if (!firstWord) return;
     let newLine1 = lineTo + ' ' + firstWord;
     if (newLine1.length > parseInt(observableSettings.maxLength())) return;
     let newLine2 = words.join(' ')
@@ -85,7 +275,7 @@ function reflowMoveWordDown() {
     let lastWord = words.pop();
     let newLine1 = words.join(' ');
     let newAfterText = lastWord + ' ' + after.join(' ');
-    result(before.concat([newLine1], splitLines(newAfterText)));
+    result(before.concat([newLine1], flatten(splitLines(newAfterText))));
 }
 function reflowMoveWordUp() {
     let pos = cursorPosition();
@@ -99,7 +289,7 @@ function reflowMoveWordUp() {
     let newLine1 = lineTo + ' ' + firstWord;
     if (newLine1.length > parseInt(observableSettings.maxLength())) return;
     let newAfterText = words.join(' ') + ' ' + after.join(' ');
-    result(before.concat([newLine1], splitLines(newAfterText)));
+    result(before.concat([newLine1], flatten(splitLines(newAfterText))));
 }
 
 function moveCursor(increment) {
@@ -197,7 +387,7 @@ let keyupHandler = (_, event: KeyboardEvent) => {
 
 export let vm = {
     keydownHandler, keyupHandler, cursorPosition, proofMode, discardEdits, enterProofMode,
-    reflowSetting, shiftDepressed, reflowInstantaneous,
+    reflowSetting, shiftDepressed, reflowInstantaneous, getLine, setLine,
     inputText, result, doSplit, resetSettings,
     settings: observableSettings,
     lists: map(observableSettings, (val, key) => {
