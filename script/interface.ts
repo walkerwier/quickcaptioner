@@ -63,7 +63,7 @@ function enterProofMode() {
 }
 
 function discardEdits() {
-    result(flattenParagraphList(unproofedOutput));
+    doSplit();
     proofMode(false);
     cursorPosition(1);
 }
@@ -100,17 +100,7 @@ function getLineIndex(lineNum: number) {
 }
 
 function getLineFromIndex(index: LineIndex) {
-    return proofedOutput[index.para][index.line];
-}
-
-function getLine(lineNum: number) {
-    let index = getLineIndex(lineNum);
-    return proofedOutput[index.para][index.line];
-}
-function setLine(lineNum: number, content) {
-    let index = getLineIndex(lineNum);
-    proofedOutput[index.para][index.line] = content;
-    //proofOutputUpdated();
+    return proofedOutput[index.para][index.line] || '';
 }
 
 class StagedLine {
@@ -170,6 +160,7 @@ class StagedMoveWord extends StagedChange {
         this.index2 = getLineIndex(pos);
         this.line1 = getLineFromIndex(this.index1);
         this.line2 = getLineFromIndex(this.index2);
+        this.max = parseInt(observableSettings.maxLength());
     }
     initAsMoveDown(reflow: boolean) {
         this.init();
@@ -227,69 +218,14 @@ class StagedMoveWord extends StagedChange {
     }
 }
 
-
-function newMoveWordDown(reflow: boolean) {
-    let pos = cursorPosition();
-    if (pos <= 0 || pos >= result().length) return;
+function moveWordUp() {
+    let change = StagedMoveWord.moveUp(reflowInstantaneous());
+    if (change) change.commit();
 }
 
 function moveWordDown() {
-    let pos = cursorPosition();
-    if (pos <= 0 || pos >= result().length) return;
-    let before = result().slice();
-    let after = before.splice(pos);
-    let lineFrom = before.pop();
-    let lineTo = after.shift();
-    let words = lineFrom.split(' ').filter(x=>x);
-    let lastWord = words.pop();
-    if (!lastWord) return;
-    let newLine2 = lastWord + ' ' + lineTo;
-    if (newLine2.length > parseInt(observableSettings.maxLength())) return;
-    let newLine1 = words.join(' ')
-    result(before.concat([newLine1, newLine2], after));
-}
-
-function moveWordUp() {
-    let pos = cursorPosition();
-    if (pos <= 0 || pos >= result().length) return;
-    let before = result().slice();
-    let after = before.splice(pos);
-    let lineFrom = after.shift();
-    let lineTo = before.pop();
-    let words = lineFrom.split(' ').filter(x=>x);
-    let firstWord = words.shift();
-    if (!firstWord) return;
-    let newLine1 = lineTo + ' ' + firstWord;
-    if (newLine1.length > parseInt(observableSettings.maxLength())) return;
-    let newLine2 = words.join(' ')
-    result(before.concat([newLine1, newLine2], after));
-}
-
-function reflowMoveWordDown() {
-    let pos = cursorPosition();
-    if (pos <= 0 || pos >= result().length) return;
-    let before = result().slice();
-    let after = before.splice(pos);
-    let lineFrom = before.pop();
-    let words = lineFrom.split(' ');
-    let lastWord = words.pop();
-    let newLine1 = words.join(' ');
-    let newAfterText = lastWord + ' ' + after.join(' ');
-    result(before.concat([newLine1], flatten(splitLines(newAfterText))));
-}
-function reflowMoveWordUp() {
-    let pos = cursorPosition();
-    if (pos <= 0 || pos >= result().length) return;
-    let before = result().slice();
-    let after = before.splice(pos);
-    let lineFrom = after.shift();
-    let lineTo = before.pop();
-    let words = lineFrom.split(' ');
-    let firstWord = words.shift();
-    let newLine1 = lineTo + ' ' + firstWord;
-    if (newLine1.length > parseInt(observableSettings.maxLength())) return;
-    let newAfterText = words.join(' ') + ' ' + after.join(' ');
-    result(before.concat([newLine1], flatten(splitLines(newAfterText))));
+    let change = StagedMoveWord.moveDown(reflowInstantaneous());
+    if (change) change.commit();
 }
 
 function moveCursor(increment) {
@@ -324,6 +260,8 @@ let keys = {
 
 keys[38].enabled = computed(()=>cursorPosition()>0);
 keys[40].enabled = computed(()=>cursorPosition()<result().length);
+keys[37].enabled = pure(() => !!StagedMoveWord.moveUp(reflowInstantaneous()));
+keys[39].enabled = pure(() => !!StagedMoveWord.moveDown(reflowInstantaneous()));
 
 let shiftDepressed = keys[16].depressed;
 let reflowInstantaneous = pure(() => reflowSetting() != shiftDepressed());
@@ -344,16 +282,12 @@ KeyBinding.register('key');
 let keyCommands = {
     46: () => {},
     8: () => {},
-    37: moveWordUp,
+    37: (moveWordUp),
     38: () => moveCursor(-1),
     39: moveWordDown,
     40: () => moveCursor(1)
   };
 
-let shiftKeyCommands = {
-    37: reflowMoveWordUp,
-    39: reflowMoveWordDown,
-  };
   
 let keydownHandler = (_, event: KeyboardEvent) => {
     if (!proofMode()) return true;
@@ -387,7 +321,7 @@ let keyupHandler = (_, event: KeyboardEvent) => {
 
 export let vm = {
     keydownHandler, keyupHandler, cursorPosition, proofMode, discardEdits, enterProofMode,
-    reflowSetting, shiftDepressed, reflowInstantaneous, getLine, setLine,
+    reflowSetting, shiftDepressed, reflowInstantaneous,
     inputText, result, doSplit, resetSettings,
     settings: observableSettings,
     lists: map(observableSettings, (val, key) => {
