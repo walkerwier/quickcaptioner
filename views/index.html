@@ -4,7 +4,7 @@
         <title>Caption Test</title>
         <link rel="stylesheet" type="text/css" href="style.css" />
     </head>
-    <body data-bind="event: {keydown: keydownHandler, keyup: keyupHandler}">
+    <body data-bind="event: {keydown: keydownHandler, keyup: keyupHandler}, css:{'proof-mode': proofMode}">
         <div id="top-bar" data-bind="with: settings">
             <!-- ko ifnot: $root.proofMode -->
             <button data-bind="click: $root.enterProofMode">Proof</button>
@@ -26,17 +26,28 @@
                 <div id="result">
                     <div class="inner">
                         <div class="grow">
-                            <div class="guideline red" data-bind="style: {left: '' + settings.preferCutoff() + 'ch'}"></div>
-                            <div class="guideline blue" data-bind="style: {left: '' + settings.prepositionCutoff() + 'ch'}"></div>
-                            <div class="guideline green" data-bind="style: {left: '' + settings.hyhpenCutoff() + 'ch'}"></div>
-                            <div class="guideline" data-bind="style: {left: '' + settings.maxLength() + 'ch'}"></div>
-                            <div id="cursor" data-bind="style: {top: ''+(cursorPosition()*1.3)+'em'}, visible: proofMode"></div>
-                            <table>
+                            <div id="guideline-container">
+                                <div class="guideline red" data-bind="style: {left: '' + settings.preferCutoff() + 'ch'}"></div>
+                                <div class="guideline blue" data-bind="style: {left: '' + settings.prepositionCutoff() + 'ch'}"></div>
+                                <div class="guideline green" data-bind="style: {left: '' + settings.hyhpenCutoff() + 'ch'}"></div>
+                                <div class="guideline" data-bind="style: {left: '' + settings.maxLength() + 'ch'}"></div>
+                            </div>
+                            <div id="cursor" data-bind="style: {top: ''+(cursorPosition()*19)+'px',width: ''+(parseInt($root.settings.maxLength())+2)+'ch'}, visible: proofMode"></div>
+                            <div id="content-table" data-bind="foreach: result">
+                                <div data-bind="text: $data || '\u00A0'"></div>
+                            </div>
+                            <table id="annotation-table">
                                 <tbody data-bind="foreach: result">
                                     <tr>
-                                        <td data-bind="text: text"></td>
-                                        <td class="annotation" data-bind="text: hardBreakAfter ? '\u00B6' : ''"></td>
-                                        <td data-bind="text: text.length"></td>
+                                        <!-- ko ifnot: $index() % 2 -->
+                                        <td rowspan="2">
+                                            <span class="other-button" data-bind="click:function(){$root.cursorPosition($index());}">&#149;</span>
+                                            <span data-bind="text: Math.floor($index()/2) + 1, click:function(){$root.cursorPosition($index()+1);}"></span>
+                                        </td>
+                                        <!-- /ko -->
+                                        <td class="placeholder" data-bind="style: {'min-width': ''+$root.settings.maxLength()+'ch'}"></td>
+                                        <td class="annotation" data-bind="text: $data[$data.length-1]===' ' ? '\u00B6' : ''"></td>
+                                        <td data-bind="text: $data.trim().length"></td>
                                     </tr>
                                 </tbody>
                             </table>

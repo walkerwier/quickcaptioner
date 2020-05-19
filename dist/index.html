@@ -4,31 +4,47 @@
         <title>Caption Test</title>
         <link rel="stylesheet" type="text/css" href="style.css" />
     </head>
-    <body>
+    <body data-bind="event: {keydown: keydownHandler, keyup: keyupHandler}">
         <div id="top-bar" data-bind="with: settings">
+            <!-- ko ifnot: $root.proofMode -->
+            <button data-bind="click: $root.enterProofMode">Proof</button>
             Max: <input type="number" data-bind="textInput: maxLength" min="5" />
             "Prefer" rules cutoff: <input type="number" data-bind="textInput: preferCutoff, attr: {max: maxLength}" min="0"/>
             Prepositions cutoff: <input type="number" data-bind="textInput: prepositionCutoff, attr: {max: maxLength}" min="0"/>
             Hyphen cutoff: <input type="number" data-bind="textInput: hyhpenCutoff, attr: {max: maxLength}" min="0"/>
-            <button data-bind="click: $root.resetSettings">Reset Settings</button>
+            <button data-bind="click: $root.resetSettings" id="reset-button">Reset Settings</button>
+            <!-- /ko -->
+            <!-- ko if: $root.proofMode -->
+            <button data-bind="click: $root.discardEdits" class="solo">Discard edits</button>
+            <!-- /ko -->
         </div>
         <div id="settings-container">
             <div id="main">
                 <div id="original">
-                    <textarea data-bind="textInput: inputText"></textarea>
+                    <textarea data-bind="textInput: inputText, disable: proofMode"></textarea>
                 </div>
                 <div id="result">
                     <div class="inner">
                         <div class="grow">
-                            <div class="guideline red" data-bind="style: {left: '' + settings.preferCutoff() + 'ch'}"></div>
-                            <div class="guideline blue" data-bind="style: {left: '' + settings.prepositionCutoff() + 'ch'}"></div>
-                            <div class="guideline green" data-bind="style: {left: '' + settings.hyhpenCutoff() + 'ch'}"></div>
-                            <div class="guideline" data-bind="style: {left: '' + settings.maxLength() + 'ch'}"></div>
-                            <table>
+                            <div id="guideline-container">
+                                <div class="guideline red" data-bind="style: {left: '' + settings.preferCutoff() + 'ch'}"></div>
+                                <div class="guideline blue" data-bind="style: {left: '' + settings.prepositionCutoff() + 'ch'}"></div>
+                                <div class="guideline green" data-bind="style: {left: '' + settings.hyhpenCutoff() + 'ch'}"></div>
+                                <div class="guideline" data-bind="style: {left: '' + settings.maxLength() + 'ch'}"></div>
+                            </div>
+                            <div id="cursor" data-bind="style: {top: 'calc('+(cursorPosition()*1.3)+'em + '+(cursorPosition()*2)+'px)'}, visible: proofMode"></div>
+                            <div id="content-table" data-bind="foreach: result">
+                                <div data-bind="text: text"></div>
+                            </div>
+                            <table id="annotation-table">
                                 <tbody data-bind="foreach: result">
                                     <tr>
-                                        <td data-bind="text: $data"></td>
-                                        <td data-bind="text: $data.length"></td>
+                                        <!-- ko ifnot: $index() % 2 -->
+                                        <td rowspan="2" data-bind="text: Math.floor($index()/2) + 1"></td>
+                                        <!-- /ko -->
+                                        <td class="placeholder" data-bind="style: {width: ''+$root.settings.maxLength()+'ch'}"></td>
+                                        <td class="annotation" data-bind="text: hardBreakAfter ? '\u00B6' : ''"></td>
+                                        <td data-bind="text: text.length"></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -36,12 +52,55 @@
                     </div>
                 </div>
             </div>
-            <div id="settings" data-bind="foreach: lists">
-                <div>
-                    <textarea data-bind="textInput: list"></textarea>
-                    <label data-bind="text: label"></label>
+                <!-- ko ifnot: proofMode -->
+                <div id="settings" data-bind="foreach: lists">
+                        <div data-bind="attr:{title: label}">
+                            <textarea data-bind="textInput: list"></textarea>
+                        </div>
                 </div>
-            </div>
+                <!-- /ko -->
+                <!-- ko if: proofMode -->
+                <div id="proof-controls">
+                    <div class="center">
+                        <div>
+                            <button class="left" data-bind="key: 16">shift</button>
+                        </div>
+                        <label>
+                            <!-- ko ifnot: shiftDepressed-->
+                            <input type="checkbox" data-bind="checked: reflowSetting" />
+                            <!-- /ko -->
+                            <!-- ko if: shiftDepressed-->
+                            <input type="checkbox" data-bind="checked: reflowInstantaneous" disabled />
+                            <!-- /ko -->
+                            Reflow
+                        </label>
+                    </div>
+                    <div class="left">
+                        <div>
+                            <button data-bind="key: 38">&uarr;</button><br/><button data-bind="key: 40">&darr;</button>
+                        </div>
+                        <label>Navigate up/down</label>
+                    </div>
+                    <div class="center">
+                        <div>
+                            <button data-bind="key: 37">&larr;</button><button data-bind="key: 39">&rarr;</button>
+                        </div>
+                        <label>Move word to<br/>next/previous line</label>
+                    </div>
+                    <div class="center">
+                        <div>
+                            <button class="right" data-bind="key: 13">return</button>
+                        </div>
+                        <label>Insert break</label>
+                    </div>
+                    <div class="center">
+                        <div>
+                            <button class="right" data-bind="key: 8">delete</button>
+                        </div>
+                        <label data-bind="text: mergeType() || 'Merge lines'">Merge lines</label>
+                    </div>
+                </div>
+                <!-- /ko -->
         </div>
         <script type="text/javascript" src="main.js"></script>
     </body>

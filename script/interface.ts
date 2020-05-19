@@ -13,7 +13,7 @@ let proofMode = observable(false);
 let inputText: Observable<string> = observable('');
 let unproofedOutput: string[][] = [];
 let proofedOutput: string[][] = [];
-let result: ObservableArr<Line> = observableArray();
+let result: ObservableArr<string> = observableArray();
 
 let settingsResetCounter = observable(0);
 resolvedSettings.subscribe((settings) => {
@@ -25,26 +25,17 @@ function resetSettings() {
     settingsResetCounter(settingsResetCounter()+1);
 }
 
-class Line {
-    text: string = '';
-    hardBreakAfter: boolean = false;
-}
 
-function flattenParagraphList(paragraphs: string[][], startIndex=0) : Line[] {
+function flattenParagraphList(paragraphs: string[][], startIndex=0) : string[] {
     let result = [];
     for (let i=0; i<paragraphs.length; i++) {
-        let paragraph = paragraphs[i].map(x => {
-                return {
-                    text: x,
-                    hardBreakAfter: false
-                }
-            });
+        let paragraph = paragraphs[i].slice();
         if (paragraph.length) {
-            paragraph[paragraph.length - 1].hardBreakAfter = true;
+            paragraph[paragraph.length - 1] += ' ';
         }
         result.push.apply(result, paragraph);
         if ((result.length + startIndex) % 2) {
-            result.push(new Line());
+            result.push('');
         }
     }
     return result;
@@ -63,6 +54,9 @@ let cursorPosition = observable(1);
 let reflowSetting = observable(false);
 
 function enterProofMode() {
+    if (document['activeElement']) {
+        (document.activeElement as HTMLElement).blur();
+    }
     proofedOutput = unproofedOutput;
     if (result().length < 1) {
         cursorPosition(0);
@@ -166,6 +160,10 @@ class StagedMergeParagraphs implements StagedAction {
     constructor(index) {
         this.index = index;
         let firstPara = proofedOutput[this.index.para];
+        let nextPara = proofedOutput[this.index.para + 1];
+        if (!nextPara) {
+            throw 'End of document';
+        }
         if (this.index.line < firstPara.length - 1) {
             throw "Cursor not at break";
         }
@@ -251,7 +249,10 @@ class StagedChange {
             change.description = 'Merge lines';
             let index = getLineIndex(cursorPosition() - 1);
             let oldLine1 = getLineFromIndex(index);
-            let oldLine2 = getLineFromIndex(new LineIndex(index.para, index.line+1));
+            let oldLine2 = proofedOutput[index.para][index.line+1];
+            if (oldLine2 === undefined) {
+                throw "End of paragraph"
+            }
             if (!oldLine1 || !oldLine2) change.description = 'Delete blank line';
             let action = new StagedMergeLines(index);
             let max = parseInt(observableSettings.maxLength());
@@ -385,6 +386,9 @@ function moveCursor(increment) {
     if (pos < 0) pos = 0;
     if (pos > len) pos = len;
     cursorPosition(pos);
+    let cursor = document.getElementById('cursor');
+    let method = cursor['scrollIntoViewIfNeeded'] || cursorPosition['scrollIntoView'];
+    method.call(cursor);
 }
 
 class Key {
@@ -412,7 +416,6 @@ keys[40].enabled = computed(()=>cursorPosition()<result().length);
 keys[37].enabled = pure(() => !!StagedMoveWord.moveUp(reflowInstantaneous()));
 keys[39].enabled = pure(() => !!StagedMoveWord.moveDown(reflowInstantaneous()));
 keys[8].enabled = pure(()=>!!mergeType());
-let x = pure(()=>!!mergeType())
 
 let shiftDepressed = keys[16].depressed;
 let reflowInstantaneous = pure(() => reflowSetting() != shiftDepressed());
@@ -435,7 +438,12 @@ KeyBinding.register('key');
 
   
 let keydownHandler = (_, event: KeyboardEvent) => {
-    if (!proofMode()) return true;
+    if (!proofMode()) {
+        if (event.keyCode === 13 && event.altKey) {
+            enterProofMode();
+        }
+        return true;
+    }
     if ((event.target as Element).tagName === 'TEXTAREA' || (event.target as Element).tagName === 'INPUT') {
         return true;
     }
