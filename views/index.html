@@ -34,8 +34,9 @@
                             <table>
                                 <tbody data-bind="foreach: result">
                                     <tr>
-                                        <td data-bind="text: $data"></td>
-                                        <td data-bind="text: $data.length"></td>
+                                        <td data-bind="text: text"></td>
+                                        <td class="annotation" data-bind="text: hardBreakAfter ? '\u00B6' : ''"></td>
+                                        <td data-bind="text: text.length"></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -88,7 +89,7 @@
                         <div>
                             <button class="right" data-bind="key: 8">delete</button>
                         </div>
-                        <label>Delete break</label>
+                        <label data-bind="text: mergeType() || 'Merge lines'">Merge lines</label>
                     </div>
                 </div>
                 <!-- /ko -->

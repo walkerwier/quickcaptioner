@@ -13,7 +13,7 @@ let proofMode = observable(false);
 let inputText: Observable<string> = observable('');
 let unproofedOutput: string[][] = [];
 let proofedOutput: string[][] = [];
-let result: ObservableArr<string> = observableArray();
+let result: ObservableArr<Line> = observableArray();
 
 let settingsResetCounter = observable(0);
 resolvedSettings.subscribe((settings) => {
@@ -30,13 +30,21 @@ class Line {
     hardBreakAfter: boolean = false;
 }
 
-function flattenParagraphList(paragraphs: string[][], startIndex=0) : string[] {
+function flattenParagraphList(paragraphs: string[][], startIndex=0) : Line[] {
     let result = [];
     for (let i=0; i<paragraphs.length; i++) {
-        let paragraph = paragraphs[i];
+        let paragraph = paragraphs[i].map(x => {
+                return {
+                    text: x,
+                    hardBreakAfter: false
+                }
+            });
+        if (paragraph.length) {
+            paragraph[paragraph.length - 1].hardBreakAfter = true;
+        }
         result.push.apply(result, paragraph);
         if ((result.length + startIndex) % 2) {
-            result.push('');
+            result.push(new Line());
         }
     }
     return result;
@@ -68,12 +76,15 @@ function discardEdits() {
     cursorPosition(1);
 }
 
-function proofOutputUpdated() {
-    result(flattenParagraphList(proofedOutput));
-}
+let proofedOutputObservableProxy = observable(false);
 
-function splitOnePara(text) {
-    return splitLines(text)[0];
+function proofOutputUpdated() {
+    //proofedOutputObservableProxy(!!proofedOutputObservableProxy());
+    result(flattenParagraphList(proofedOutput));
+    // flicker cursor: bad hack to update button enabled states, etc.
+    let pos = cursorPosition();
+    cursorPosition(0);
+    cursorPosition(pos);
 }
 
 class LineIndex {
@@ -103,7 +114,12 @@ function getLineFromIndex(index: LineIndex) {
     return proofedOutput[index.para][index.line] || '';
 }
 
-class StagedLine {
+
+interface StagedAction {
+    commit: () => void;
+}
+
+class StagedLine implements StagedAction {
     index: LineIndex;
     text: string;
     constructor(index, text) {
@@ -111,37 +127,154 @@ class StagedLine {
         this.text = text;
     }
     commit() {
-        proofedOutput[this.index.para][this.index.line] = this.text;
+        proofedOutput[this.index.para][this.index.line] = this.text || '';
     }
 }
 
-class StagedReflow {
+class StagedReflow implements StagedAction {
     startIndex: LineIndex;
     firstLineText: string;
-    constructor(startIndex, text) {
+    keepCharacters: number;
+    constructor(startIndex, text, keepCharacters=0) {
         this.startIndex = startIndex;
         this.firstLineText = text;
+        this.keepCharacters = keepCharacters;
     }
     commit() {
         //let para = proofedOutput[this.startIndex.para].slice(0, this.startIndex.line);
         let para = proofedOutput[this.startIndex.para].slice();
         let modifiedLines = para.splice(this.startIndex.line);
-        modifiedLines[0] = this.firstLineText;
-        proofedOutput[this.startIndex.para] = para.concat(splitOnePara(modifiedLines.join(' ')));
+        let placeholder = '';
+        let placeholderChar = String.fromCharCode(16180);
+        for (let i=0; i<this.keepCharacters; i++) {
+            placeholder += placeholderChar;
+        }
+        let firstLine = this.firstLineText || '';
+        let keepWords = firstLine.substr(0, this.keepCharacters);
+        modifiedLines[0] = placeholder + firstLine.substr(this.keepCharacters);
+        let reflowed = splitLines(modifiedLines.join(' '));
+        let reflowedCurrentPara = reflowed.shift();
+        if (!reflowedCurrentPara.length) reflowedCurrentPara = [''];
+        reflowedCurrentPara[0] = keepWords + reflowedCurrentPara[0].substr(this.keepCharacters);
+        proofedOutput[this.startIndex.para] = para.concat(reflowedCurrentPara);
+        reflowed.forEach(x => proofedOutput.splice(this.startIndex.para + 1, 0, x));
+    }
+}
+
+class StagedMergeParagraphs implements StagedAction {
+    index: LineIndex
+    constructor(index) {
+        this.index = index;
+        let firstPara = proofedOutput[this.index.para];
+        if (this.index.line < firstPara.length - 1) {
+            throw "Cursor not at break";
+        }
+    }
+    commit() {
+        let combined = proofedOutput[this.index.para].concat(proofedOutput[this.index.para + 1]);
+        proofedOutput.splice(this.index.para, 2, combined);
+    }
+}
+
+class StagedMergeLines implements StagedAction {
+    index: LineIndex
+    combinedLine: string
+    constructor (index) {
+        this.index = index;
+        let para = proofedOutput[this.index.para];
+        this.combinedLine = (para[this.index.line] + " " + para[this.index.line + 1]).trim();
+    }
+    commit() {
+        let para = proofedOutput[this.index.para];
+        para.splice(this.index.line, 2, this.combinedLine);
+    }
+}
+
+class StagedInsert implements StagedAction {
+    beforeIndex: LineIndex;
+    constructor(index) {
+        this.beforeIndex = index;
+    }
+    commit() {
+        let para = proofedOutput[this.beforeIndex.para] || [];
+        let beforePara = para.splice(0, this.beforeIndex.line);
+        if (!beforePara.length && !para.length) {
+            beforePara.push('');
+        } else if (!para.length) {
+            para.push('');
+        } else if (!beforePara.length) {
+            beforePara.push('');
+        }
+        proofedOutput.splice(this.beforeIndex.para, 0, beforePara);
     }
 }
 
 class StagedChange {
-    actions: (StagedLine|StagedReflow)[] = [];
+    description: string;
+    actions: StagedAction[] = [];
     stageLine(index, text) {
         this.actions.push(new StagedLine(index, text));
     }
-    stageReflow(index, text) {
-        this.actions.push(new StagedReflow(index, text));
+    stageReflow(index, text, keepCharacters=0) {
+        this.actions.push(new StagedReflow(index, text, keepCharacters));
+    }
+    stageInsert(index) {
+        this.actions.push(new StagedInsert(index));
+    }
+    stageMergeParas(index) {
+        this.actions.push(new StagedMergeParagraphs(index));
+    }
+    stageMergeLines(index) {
+        this.actions.push(new StagedMergeLines(index));
     }
     commit() {
         this.actions.forEach(x => x.commit());
         proofOutputUpdated();
+    }
+    static insert() {
+        let change = new StagedChange();
+        change.stageInsert(getLineIndex(cursorPosition()));
+        return change;
+    }
+    static mergeParas() {
+        try {
+            let change = new StagedChange();
+            change.stageMergeParas(getLineIndex(cursorPosition() - 1));
+            return change;
+        } catch {
+            return null;
+        }
+    }
+    static mergeLines(reflow: boolean) {
+        try {
+            let change = new StagedChange();
+            change.description = 'Merge lines';
+            let index = getLineIndex(cursorPosition() - 1);
+            let oldLine1 = getLineFromIndex(index);
+            let oldLine2 = getLineFromIndex(new LineIndex(index.para, index.line+1));
+            if (!oldLine1 || !oldLine2) change.description = 'Delete blank line';
+            let action = new StagedMergeLines(index);
+            let max = parseInt(observableSettings.maxLength());
+            change.actions.push(action);
+            if (action.combinedLine.length > max) {
+                if (!reflow) {
+                    throw 'Combined line would be too long';
+                } else {
+                    let firstWord = (oldLine2 || '').split(' ').shift();
+                    let keepCharacters = 0;
+                    if (firstWord) {
+                        keepCharacters = oldLine1.length + 1 + firstWord.length;
+                    }
+                    if (keepCharacters > max) {
+                        throw 'Combined line would be too long';
+                    }
+                    change.stageReflow(action.index, action.combinedLine, keepCharacters);
+                }
+            }
+            return change;
+        } catch {
+            return null;
+        }
     }
 }
 
@@ -228,6 +361,24 @@ function moveWordDown() {
     if (change) change.commit();
 }
 
+function insert() {
+    let change = StagedChange.insert();
+    if (change) change.commit();
+}
+
+let mergeType = pure(() => {
+    //proofedOutputObservableProxy();
+    if (StagedChange.mergeParas()) return 'Delete Break';
+    let change = StagedChange.mergeLines(reflowInstantaneous());
+    if (change) return change.description;
+    return null;
+});
+
+function merge() {
+    let change = StagedChange.mergeParas() || StagedChange.mergeLines(reflowInstantaneous());
+    if (change) change.commit();
+}
+
 function moveCursor(increment) {
     let pos = cursorPosition() + increment;
     let len = result().length;
@@ -235,8 +386,6 @@ function moveCursor(increment) {
     if (pos > len) pos = len;
     cursorPosition(pos);
 }
-
-
 
 class Key {
     depressed: Observable<boolean> = observable(false);
@@ -250,8 +399,8 @@ class Key {
 
 let keys = {
     16: new Key(()=>{}),
-    8: new Key(()=>{}),
-    13: new Key(()=>{}),
+    8: new Key(merge),
+    13: new Key(insert),
     37: new Key(moveWordUp),
     38: new Key(() => moveCursor(-1)),
     39: new Key(moveWordDown),
@@ -262,6 +411,8 @@ keys[38].enabled = computed(()=>cursorPosition()>0);
 keys[40].enabled = computed(()=>cursorPosition()<result().length);
 keys[37].enabled = pure(() => !!StagedMoveWord.moveUp(reflowInstantaneous()));
 keys[39].enabled = pure(() => !!StagedMoveWord.moveDown(reflowInstantaneous()));
+keys[8].enabled = pure(()=>!!mergeType());
+let x = pure(()=>!!mergeType())
 
 let shiftDepressed = keys[16].depressed;
 let reflowInstantaneous = pure(() => reflowSetting() != shiftDepressed());
@@ -272,21 +423,15 @@ class KeyBinding extends SimpleBinding<number> {
         return {
             click: key.action,
             css: {'depressed': key.depressed},
-            enable: computed(()=>key.enabled()||key.active())
+            enable: pure(()=>{
+                //proofedOutputObservableProxy();
+                return key.enabled()||key.active();
+            })
         };
     }
 }
 
 KeyBinding.register('key');
-
-let keyCommands = {
-    46: () => {},
-    8: () => {},
-    37: (moveWordUp),
-    38: () => moveCursor(-1),
-    39: moveWordDown,
-    40: () => moveCursor(1)
-  };
 
   
 let keydownHandler = (_, event: KeyboardEvent) => {
@@ -320,8 +465,9 @@ let keyupHandler = (_, event: KeyboardEvent) => {
 
 
 export let vm = {
+    proofedOutput: ()=>proofedOutput,
     keydownHandler, keyupHandler, cursorPosition, proofMode, discardEdits, enterProofMode,
-    reflowSetting, shiftDepressed, reflowInstantaneous,
+    reflowSetting, shiftDepressed, reflowInstantaneous, mergeType,
     inputText, result, doSplit, resetSettings,
     settings: observableSettings,
     lists: map(observableSettings, (val, key) => {
