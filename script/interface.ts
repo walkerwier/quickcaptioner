@@ -3,6 +3,7 @@ import {splitLines, setSettings} from './linesplitting'
 import {observableSettings, resolvedSettings, resetSettings as _resetSettings} from './settings'
 import {SimpleBinding} from './compontents'
 import {mapToList} from './utilities'
+import {makeFileReceivedHadler} from './import'
 
 setSettings(resolvedSettings());
 
@@ -458,7 +459,6 @@ let keydownHandler = (_, event: KeyboardEvent) => {
     return true;
 };
 
-  
 let keyupHandler = (_, event: KeyboardEvent) => {
     if (!proofMode()) return true;
     let key = keys[event.keyCode];
@@ -478,56 +478,12 @@ function exportProofedOutput() {
     anchor.click();
 }
 
-function preparse(text: string) {
-    return text.trim().replace(/\r\n/g, '\n');
-}
 
-function parseSRT(srt: string) {
-    srt = preparse(srt);
-    srt = srt.replace(/(\d+\n)?(\d\d\:)?\d\d:\d\d(,\d\d\d)? --> (\d\d\:)?\d\d:\d\d(,\d\d\d)?\n/g, '');
-    srt = srt.replace(/\n{3,}/g, '\n\n');
-    return srt;
-}
-
-function simplisticParseVTT(vtt: string) {
-    vtt = preparse(vtt);
-    vtt = vtt.replace(/^WEBVTT[^\n]*\n/i, '');
-    vtt = vtt.replace(/(\d+\n)?(\d\d\:)?\d\d:\d\d(\.\d\d\d)? --> (\d\d\:)?\d\d:\d\d(\.\d\d\d)?[^\n]*\n/g, '');
-    vtt = vtt.replace(/<[^>]+>/g, '');
-    vtt = vtt.replace(/\n{3,}/g, '\n\n');
-    return vtt.trim();
-}
-
-
-function getFileParser(file: File): (str: string)=>string {
-    let nameComponents = file.name.split('.');
-    let extension = nameComponents[nameComponents.length-1].toLowerCase();
-    if (extension === 'srt') return parseSRT;
-    if (extension === 'vtt') return simplisticParseVTT;
-    if (extension === 'txt') return preparse;
-    return null;
-}
-
-function fileReceivedHandler(files: File[]) {
-    let validFiles = files.filter(getFileParser);
-    if (validFiles.length !== 1) {
-        return;
-    }
-    let file = validFiles[0];
-    let parser = getFileParser(file);
-    let reader = new FileReader();
-    reader.onload = () => { fileReadHandler(parser(reader.result as string)); };
-    reader.readAsText(file);
-}
-
-function fileReadHandler(text) {
-    inputText(text);
-}
-
+// Everything that needs to be bound to an element in the html:
 export let vm = {
     proofedOutput: ()=>proofedOutput,
     exportProofedOutput,
-    fileReceivedHandler,
+    fileReceivedHandler: makeFileReceivedHadler(inputText),
     keydownHandler,
     keyupHandler,
     cursorPosition,
