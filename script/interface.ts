@@ -2,13 +2,14 @@ import {Observable, observable, observableArray, computed, pure, ObservableArr} 
 import {splitLines, setSettings} from './linesplitting'
 import {observableSettings, resolvedSettings, resetSettings as _resetSettings} from './settings'
 import {SimpleBinding} from './compontents'
-import map from 'lodash-es/map'
-import isArray from 'lodash-es/isArray'
-import flatten from 'lodash-es/flatten';
+import {mapToList} from './utilities'
+//import isArray from 'lodash-es/isArray'
+//import flatten from 'lodash-es/flatten';
 
 setSettings(resolvedSettings());
 
 let proofMode = observable(false);
+let proofOnly = observableSettings.proofOnly;
 
 let inputText: Observable<string> = observable('');
 let unproofedOutput: string[][] = [];
@@ -41,13 +42,18 @@ function flattenParagraphList(paragraphs: string[][], startIndex=0) : string[] {
     return result;
 }
 
-
+function importPreSplitText(text) : string[][] {
+    return text.split(/\s*(\n\s*){2,}/)
+        .filter(x => x && x.trim())
+        .map(x => x.split(/\s*\n\s*/).filter(x => x && x.trim()));
+}
 
 function doSplit() {
-    unproofedOutput = splitLines(inputText());
+    unproofedOutput = (proofOnly() ? importPreSplitText : splitLines)(inputText());
     result(flattenParagraphList(unproofedOutput));
 }
 inputText.subscribe(doSplit);
+proofOnly.subscribe(doSplit);
 
 /** Proofing **/
 let cursorPosition = observable(1);
@@ -471,15 +477,72 @@ let keyupHandler = (_, event: KeyboardEvent) => {
     return true;
 };
 
+function exportProofedOutput() {
+    let combinedText = proofedOutput.map(x => x.join('\n')).join('\n\n');
+    let dataURI = 'data:text/plain;charset=utf-8,' + encodeURIComponent(combinedText);
+    let anchor = document.createElement('a');
+    anchor.setAttribute('href', dataURI);
+    anchor.setAttribute('download', 'proofed-captions.txt');
+    anchor.click();
+}
+
+function preparse(text: string) {
+    return text.trim().replace(/\r\n/g, '\n');
+}
+
+function parseSRT(srt: string) {
+    srt = preparse(srt);
+    srt = srt.replace(/(\d+\n)?(\d\d\:)?\d\d:\d\d(,\d\d\d)? --> (\d\d\:)?\d\d:\d\d(,\d\d\d)?\n/g, '');
+    srt = srt.replace(/\n{3,}/g, '\n\n');
+    return srt;
+}
+
+function simplisticParseVTT(vtt: string) {
+    vtt = preparse(vtt);
+    vtt = vtt.replace(/^WEBVTT[^\n]*\n/i, '');
+    vtt = vtt.replace(/(\d+\n)?(\d\d\:)?\d\d:\d\d(\.\d\d\d)? --> (\d\d\:)?\d\d:\d\d(\.\d\d\d)?[^\n]*\n/g, '');
+    vtt = vtt.replace(/<[^>]+>/g, '');
+    vtt = vtt.replace(/\n{3,}/g, '\n\n');
+    return vtt.trim();
+}
+
+
+function getFileParser(file: File): (str: string)=>string {
+    //console.log(file.type);
+    //let contentTypeComponents = file.type.split('/');
+    //if (contentTypeComponents[0] !== 'text') return null;
+    let nameComponents = file.name.split('.');
+    let extension = nameComponents[nameComponents.length-1].toLowerCase();
+    if (extension === 'srt') return parseSRT;
+    if (extension === 'vtt') return simplisticParseVTT;
+    if (extension === 'txt') return preparse;
+    return null;
+}
+
+function fileReceivedHandler(files: File[]) {
+    let validFiles = files.filter(getFileParser);
+    if (validFiles.length !== 1) {
+        return;
+    }
+    let file = validFiles[0];
+    let parser = getFileParser(file);
+    let reader = new FileReader();
+    reader.onload = () => { fileReadHandler(parser(reader.result as string)); };
+    reader.readAsText(file);
+}
+
+function fileReadHandler(text) {
+    inputText(text);
+}
 
 export let vm = {
-    proofedOutput: ()=>proofedOutput,
+    proofedOutput: ()=>proofedOutput, exportProofedOutput, fileReceivedHandler,
     keydownHandler, keyupHandler, cursorPosition, proofMode, discardEdits, enterProofMode,
     reflowSetting, shiftDepressed, reflowInstantaneous, mergeType,
     inputText, result, doSplit, resetSettings,
     settings: observableSettings,
-    lists: map(observableSettings, (val, key) => {
-        if (!isArray(val())) return null;
+    lists: mapToList(observableSettings, (val, key) => {
+        if (!(val() instanceof Array)) return null;
         let listText = observable(val().join('\n'));
         listText.subscribe(x => val((x as string).split('\n').map(x => x.trim()).filter(x => x)));
         settingsResetCounter.subscribe(() => {

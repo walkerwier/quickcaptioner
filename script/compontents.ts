@@ -41,6 +41,20 @@ export class SimpleBinding<T> {
     }
 }
 
+export class ContainerBinding<T> extends SimpleBinding<T> {
+    static register(name: string) {
+        let thisClass = this;
+        bindingHandlers[name] = {
+            init: function(element: Element, va: () => any, allBindings: KnockoutAllBindingsAccessor, vm, context) {
+                let model = new thisClass(va(), element as HTMLElement);
+                applyBindingsToNode(element, model.getBindings(allBindings), context);
+                applyBindingsToDescendants(context, element);
+            return { controlsDescendantBindings: true };
+            }
+        }
+    }
+}
+
 //let componentsAndBindings: {new(): Component | SimpleBinding<any>}[] = [];
 
 class ImageBinding extends SimpleBinding<File> {
@@ -104,26 +118,25 @@ class Draggable extends SimpleBinding<string> {
     }
 }
 
-class DragTarget extends SimpleBinding<(files: File[], index?: number) => void> {
+class DragTarget extends SimpleBinding<(files: File[]) => void> {
     hovering: Observable<boolean> = observable(false);
     getBindings(allBindings) {
         let items = allBindings.get('items')
-        let currentTarget: Element  = null;
-        let afterTarget: boolean = false;
-        let currentDrag = null;
+        // let currentTarget: Element  = null;
+        // let afterTarget: boolean = false;
+        // let currentDrag = null;
         let hovering = this.hovering;
         let self = this;
         let dragStart = () => hovering(true);
         let dragStop = () => {
             hovering(false);
-            if (currentTarget) {
-                currentTarget.classList.remove('insert-before', 'insert-after');
-            }
-            currentTarget = null;
+            // if (currentTarget) {
+            //     currentTarget.classList.remove('insert-before', 'insert-after');
+            // }
+            // currentTarget = null;
             //currentDrag = null;
         };
         return {
-            'foreach': items,
             css: {
                 'dragging': hovering,
                 'droparea': true
@@ -132,24 +145,24 @@ class DragTarget extends SimpleBinding<(files: File[], index?: number) => void> 
                 'dragover': (dummy: any, e: DragEvent) => {
                     e.preventDefault();
                     dragStart();
-                    let target = getAncestor(e.target as Element, '.section')
-                    if (!target) return;
+                    // let target = getAncestor(e.target as Element, '.section')
+                    // if (!target) return;
 
-                    afterTarget = (e.offsetY > (target.offsetHeight / 2));
-                    let cls = afterTarget ? 'insert-after' : 'insert-before';
-                    if (currentTarget) {
-                        currentTarget.classList.remove('insert-before', 'insert-after');
-                    }
-                    target.classList.add(cls);
-                    currentTarget = target;
+                    // afterTarget = (e.offsetY > (target.offsetHeight / 2));
+                    // let cls = afterTarget ? 'insert-after' : 'insert-before';
+                    // if (currentTarget) {
+                    //     currentTarget.classList.remove('insert-before', 'insert-after');
+                    // }
+                    // target.classList.add(cls);
+                    // currentTarget = target;
                 },
                 'dragenter': (dummy: any, e: Event) => {
                     dragStart();
                 },
                 'dragleave': dragStop,
                 'dragstart': (_, e: DragEvent) => {
-                    e.dataTransfer.setData('text/plain', 'data');
-                    currentDrag = dataFor(e.target as Element);
+                    // e.dataTransfer.setData('text/plain', 'data');
+                    // currentDrag = dataFor(e.target as Element);
                     return true;
                 },
                 'mouseleave': dragStop,
@@ -158,23 +171,23 @@ class DragTarget extends SimpleBinding<(files: File[], index?: number) => void> 
                 // },
                 'drop': (dummy: any, e: DragEvent) => {
                     e.preventDefault();
-                    let dragData = null;
-                    if (e.dataTransfer.getData('text/plain') == 'data') {
-                        dragData = currentDrag;
-                    }
+                    // let dragData = null;
+                    // if (e.dataTransfer.getData('text/plain') == 'data') {
+                    //     dragData = currentDrag;
+                    // }
                     let index = -1;
-                    if (currentTarget) {
-                        let item = dataFor(currentTarget);
-                        index = items.indexOf(item) + afterTarget;
-                    }
+                    // if (currentTarget) {
+                    //     let item = dataFor(currentTarget);
+                    //     index = items.indexOf(item) + afterTarget;
+                    // }
                     dragStop();
-                    if (dragData) {
-                        // reorder
-                        let innerList = items();
-                        innerList.splice(innerList.indexOf(dragData), 1);
-                        innerList.splice(index, 0, dragData);
-                        items(innerList);
-                    }
+                    // if (dragData) {
+                    //     // reorder
+                    //     let innerList = items();
+                    //     innerList.splice(innerList.indexOf(dragData), 1);
+                    //     innerList.splice(index, 0, dragData);
+                    //     items(innerList);
+                    // }
                     let files: File[] = [];
                     let dtItems = e.dataTransfer.items;
                     if (dtItems) {
@@ -188,7 +201,7 @@ class DragTarget extends SimpleBinding<(files: File[], index?: number) => void> 
                             files.push(items[i])
                         }
                     }
-                    this.value(files, index);
+                    this.value(files);
                 }
             } 
         };

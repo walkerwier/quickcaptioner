@@ -16,6 +16,7 @@
     "lodash-es": "^4.17.15"
   },
   "devDependencies": {
-    "@types/node": "^13.13.5"
+    "@types/node": "^13.13.5",
+    "webpack-bundle-analyzer": "^3.8.0"
   }
 }

@@ -1,8 +1,9 @@
 import {Observable, observable, observableArray, computed, pure, unwrap} from './shortcuts'
-import mapValues from 'lodash-es/mapValues'
-import defaults from 'lodash-es/defaults'
+import {map as mapValues, defaults} from './utilities'
+//import defaults from 'lodash-es/defaults'
 
 let defaultSettings = {
+    proofOnly: false,
     maxLength: 32,
     preferCutoff: 25,
     prepositionCutoff: 25,

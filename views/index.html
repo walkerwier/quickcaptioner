@@ -8,19 +8,21 @@
         <div id="top-bar" data-bind="with: settings">
             <!-- ko ifnot: $root.proofMode -->
             <button data-bind="click: $root.enterProofMode">Proof</button>
-            Max: <input type="number" data-bind="textInput: maxLength" min="5" />
-            "Prefer" rules cutoff: <input type="number" data-bind="textInput: preferCutoff, attr: {max: maxLength}" min="0"/>
-            Prepositions cutoff: <input type="number" data-bind="textInput: prepositionCutoff, attr: {max: maxLength}" min="0"/>
-            Hyphen cutoff: <input type="number" data-bind="textInput: hyhpenCutoff, attr: {max: maxLength}" min="0"/>
+            Max: <input type="number" data-bind="textInput: maxLength, disable: proofOnly" min="5" />
+            <span class="long">"Prefer" rules cutoff:</span><span class="short">Prefer:</span> <input type="number" data-bind="textInput: preferCutoff, attr: {max: maxLength}, disable: proofOnly" min="0"/>
+            <span class="long">Prepositions cutoff:</span><span class="short">Prepositions:</span>  <input type="number" data-bind="textInput: prepositionCutoff, attr: {max: maxLength}, disable: proofOnly" min="0"/>
+            <span class="long">Hyphen cutoff:</span><span class="short">Hyphens:</span>  <input type="number" data-bind="textInput: hyhpenCutoff, attr: {max: maxLength}, disable: proofOnly" min="0"/>
             <button data-bind="click: $root.resetSettings" id="reset-button">Reset Settings</button>
+            <label class="right"><input type="checkbox" data-bind="checked: proofOnly" /> Proof Only</label>
             <!-- /ko -->
             <!-- ko if: $root.proofMode -->
             <button data-bind="click: $root.discardEdits" class="solo">Discard edits</button>
+            <button data-bind="click: $root.exportProofedOutput" class="solo right">Export</button>
             <!-- /ko -->
         </div>
         <div id="settings-container">
             <div id="main">
-                <div id="original">
+                <div id="original" data-bind="dropzoneFor: fileReceivedHandler">
                     <textarea data-bind="textInput: inputText, disable: proofMode"></textarea>
                 </div>
                 <div id="result">
@@ -58,7 +60,7 @@
                 <!-- ko ifnot: proofMode -->
                 <div id="settings" data-bind="foreach: lists">
                         <div data-bind="attr:{title: label}">
-                            <textarea data-bind="textInput: list"></textarea>
+                            <textarea data-bind="textInput: list, disable: $root.settings.proofOnly"></textarea>
                         </div>
                 </div>
                 <!-- /ko -->

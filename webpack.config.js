@@ -1,14 +1,16 @@
 const path = require('path');
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 module.exports = {
-  mode: 'production',
+  mode: 'development',
   entry: {
       main: './index.js'
   },
-  //devtool: 'inline-source-map',
+  devtool: 'inline-source-map',
   devServer: {
     contentBase:'./dist',
+    injectClient: false,
     proxy: {
     }
   },
@@ -49,6 +51,7 @@ module.exports = {
   plugins: [
     new MiniCssExtractPlugin({
       filename: 'style.css',
-    })
+    }),
+    new BundleAnalyzerPlugin()
   ]
 };
