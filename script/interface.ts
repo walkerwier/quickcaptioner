@@ -3,8 +3,6 @@ import {splitLines, setSettings} from './linesplitting'
 import {observableSettings, resolvedSettings, resetSettings as _resetSettings} from './settings'
 import {SimpleBinding} from './compontents'
 import {mapToList} from './utilities'
-//import isArray from 'lodash-es/isArray'
-//import flatten from 'lodash-es/flatten';
 
 setSettings(resolvedSettings());
 
@@ -76,10 +74,7 @@ function discardEdits() {
     cursorPosition(1);
 }
 
-let proofedOutputObservableProxy = observable(false);
-
 function proofOutputUpdated() {
-    //proofedOutputObservableProxy(!!proofedOutputObservableProxy());
     result(flattenParagraphList(proofedOutput));
     // flicker cursor: bad hack to update button enabled states, etc.
     let pos = cursorPosition();
@@ -141,7 +136,6 @@ class StagedReflow implements StagedAction {
         this.keepCharacters = keepCharacters;
     }
     commit() {
-        //let para = proofedOutput[this.startIndex.para].slice(0, this.startIndex.line);
         let para = proofedOutput[this.startIndex.para].slice();
         let modifiedLines = para.splice(this.startIndex.line);
         let placeholder = '';
@@ -374,7 +368,6 @@ function insert() {
 }
 
 let mergeType = pure(() => {
-    //proofedOutputObservableProxy();
     if (StagedChange.mergeParas()) return 'Delete Break';
     let change = StagedChange.mergeLines(reflowInstantaneous());
     if (change) return change.description;
@@ -433,7 +426,6 @@ class KeyBinding extends SimpleBinding<number> {
             click: key.action,
             css: {'depressed': key.depressed},
             enable: pure(()=>{
-                //proofedOutputObservableProxy();
                 return key.enabled()||key.active();
             })
         };
@@ -508,9 +500,6 @@ function simplisticParseVTT(vtt: string) {
 
 
 function getFileParser(file: File): (str: string)=>string {
-    //console.log(file.type);
-    //let contentTypeComponents = file.type.split('/');
-    //if (contentTypeComponents[0] !== 'text') return null;
     let nameComponents = file.name.split('.');
     let extension = nameComponents[nameComponents.length-1].toLowerCase();
     if (extension === 'srt') return parseSRT;
@@ -536,10 +525,23 @@ function fileReadHandler(text) {
 }
 
 export let vm = {
-    proofedOutput: ()=>proofedOutput, exportProofedOutput, fileReceivedHandler,
-    keydownHandler, keyupHandler, cursorPosition, proofMode, discardEdits, enterProofMode,
-    reflowSetting, shiftDepressed, reflowInstantaneous, mergeType,
-    inputText, result, doSplit, resetSettings,
+    proofedOutput: ()=>proofedOutput,
+    exportProofedOutput,
+    fileReceivedHandler,
+    keydownHandler,
+    keyupHandler,
+    cursorPosition,
+    proofMode,
+    discardEdits,
+    enterProofMode,
+    reflowSetting,
+    shiftDepressed,
+    reflowInstantaneous,
+    mergeType,
+    inputText,
+    result,
+    doSplit,
+    resetSettings,
     settings: observableSettings,
     lists: mapToList(observableSettings, (val, key) => {
         if (!(val() instanceof Array)) return null;
@@ -548,10 +550,6 @@ export let vm = {
         settingsResetCounter.subscribe(() => {
             listText(val().join('\n'));
         });
-        // let listText = computed({
-        //         read: () => val().join('\n'),
-        //         write: x => val((x as string).split('\n').map(x => x.trim()).filter(x => x))
-        // });
         return {
             label: key,
             list: listText

@@ -55,7 +55,6 @@ export class ContainerBinding<T> extends SimpleBinding<T> {
     }
 }
 
-//let componentsAndBindings: {new(): Component | SimpleBinding<any>}[] = [];
 
 class ImageBinding extends SimpleBinding<File> {
     getBindings() {

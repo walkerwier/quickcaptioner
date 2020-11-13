@@ -1,6 +1,5 @@
 import {Observable, observable, observableArray, computed, pure, unwrap} from './shortcuts'
 import {map as mapValues, defaults} from './utilities'
-//import defaults from 'lodash-es/defaults'
 
 let defaultSettings = {
     proofOnly: false,
@@ -46,7 +45,10 @@ let savedSettings = localStorage['settings'];
 savedSettings = savedSettings ? JSON.parse(savedSettings) : {};
 let settings = defaults(savedSettings, defaultSettings);
 
+
 export let observableSettings = mapValues(settings, observable);
+
+// When changing maxLength, make sure none of the cutoffs are higher than the new max
 observableSettings.maxLength.subscribe((len) => {
     if (parseInt(observableSettings.preferCutoff()) > parseInt(len)) {
         observableSettings.preferCutoff(len);
@@ -58,8 +60,10 @@ observableSettings.maxLength.subscribe((len) => {
         observableSettings.hyhpenCutoff(len);
     }
 });
+
 export let resolvedSettings = computed(()=>mapValues(observableSettings, unwrap));
 
+// Anytime settings change, persist them to local storage
 resolvedSettings.subscribe((settings) => {
     localStorage['settings'] = JSON.stringify(settings);
 });
