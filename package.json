@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webpack",
-    "rundev": "node '/Users/jwwier/Documents/Project Repos/Webpack Projects/node_modules/webpack-dev-server/bin/webpack-dev-server.js'"
+    "build": "webpack"
   },
   "author": "",
   "license": "ISC",
