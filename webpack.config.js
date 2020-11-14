@@ -7,7 +7,7 @@ module.exports = {
   entry: {
       main: './index.js'
   },
-  devtool: 'inline-source-map',
+  //devtool: 'inline-source-map',
   devServer: {
     contentBase:'./dist',
     injectClient: false,
@@ -52,6 +52,6 @@ module.exports = {
     new MiniCssExtractPlugin({
       filename: 'style.css',
     }),
-    new BundleAnalyzerPlugin()
+    //new BundleAnalyzerPlugin()
   ]
 };
