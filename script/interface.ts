@@ -56,7 +56,7 @@ proofOnly.subscribe(doSplit);
 
 /** Proofing **/
 let cursorPosition = observable(1);
-let reflowSetting = observable(false);
+let reflowSetting = observable(true);
 
 function enterProofMode() {
     if (document['activeElement']) {
@@ -81,6 +81,19 @@ function proofOutputUpdated() {
     let pos = cursorPosition();
     cursorPosition(0);
     cursorPosition(pos);
+}
+
+function readbackLine(index, line) {
+    let oldLine = this;
+    if (oldLine == line) return;
+    let li = getLineIndex(index());
+    if (reflowInstantaneous()) {
+        let sr = new StagedReflow(li, line);
+        sr.commit();
+    } else {
+        proofedOutput[li.para][li.line] = line;
+    }
+    proofOutputUpdated();
 }
 
 class LineIndex {
@@ -403,6 +416,7 @@ class Key {
 
 let keys = {
     16: new Key(()=>{}),
+    18: new Key(()=>{}),
     8: new Key(merge),
     13: new Key(insert),
     37: new Key(moveWordUp),
@@ -418,6 +432,7 @@ keys[39].enabled = pure(() => !!StagedMoveWord.moveDown(reflowInstantaneous()));
 keys[8].enabled = pure(()=>!!mergeType());
 
 let shiftDepressed = keys[16].depressed;
+let optionDepressed = keys[18].depressed;
 let reflowInstantaneous = pure(() => reflowSetting() != shiftDepressed());
 
 class KeyBinding extends SimpleBinding<number> {
@@ -478,11 +493,44 @@ function exportProofedOutput() {
     anchor.click();
 }
 
+function exportPaddedOutput(padChar: string='\u00A0') {
+    let flatList = flattenParagraphList(proofedOutput);
+    let max = parseInt(observableSettings.maxLength());
+    for (let i=0; i<flatList.length; i++) {
+        // could use padEnd but paranoid about older browsers
+        let line = flatList[i].trimRight();
+        while (line.length < max) {
+            line += padChar;
+        }
+        flatList[i] = line;
+    }
+    let combinedText = flatList.join('\n');
+    let dataURI = 'data:text/plain;charset=utf-8,' + encodeURIComponent(combinedText);
+    let anchor = document.createElement('a');
+    anchor.setAttribute('href', dataURI);
+    anchor.setAttribute('download', 'padded-captions.txt');
+    anchor.click();
+}
+
+function promptForPaddedOutput() {
+    let padChar = prompt('Specify pad character:', '\u00A0');
+    if (padChar == null) return;
+    while (padChar.length != 1) {
+        padChar = prompt('Pad character must be exactly one character! Specify:', '\u00A0')
+        if (padChar == null) return;
+    }
+    exportPaddedOutput(padChar);
+    optionDepressed(false);
+}
+
 
 // Everything that needs to be bound to an element in the html:
 export let vm = {
     proofedOutput: ()=>proofedOutput,
     exportProofedOutput,
+    exportPaddedOutput,
+    promptForPaddedOutput,
+    optionDepressed,
     fileReceivedHandler: makeFileReceivedHadler(inputText),
     keydownHandler,
     keyupHandler,
@@ -495,6 +543,7 @@ export let vm = {
     reflowInstantaneous,
     mergeType,
     inputText,
+    readbackLine,
     result,
     doSplit,
     resetSettings,

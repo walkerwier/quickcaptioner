@@ -1,6 +1,7 @@
-import {Observable, observable, observableArray, computed, pure, getAncestor} from './shortcuts'
+import {Observable, observable, observableArray, computed, pure, getAncestor, PossiblyObservable} from './shortcuts'
 import {components, bindingHandlers, applyBindingsToNode,
     applyBindingsToDescendants, isSubscribable, unwrap, dataFor} from 'knockout'
+import { on } from 'process';
 
 
 export class Component {
@@ -207,6 +208,8 @@ class DragTarget extends SimpleBinding<(files: File[]) => void> {
     }
 }
 
+
+
 bindingHandlers['render'] = {
     init: function(element: Element, va, allBindings, vm, bindingContext) {
         let template = va();
@@ -222,8 +225,50 @@ bindingHandlers['render'] = {
     }
 }
 
+class ContentEditable extends SimpleBinding<PossiblyObservable<boolean>> {
+    getBindings(allBindings) {
+        let onEdit = allBindings.get('onEdit');
+        let el = this.element;
+        let editFunc = ()=>onEdit(el.textContent);
+        let eventIntercept = (_, e: Event) => {
+            e.stopPropagation();
+            return true;
+        };
+        let keydownHandler = (_, e: KeyboardEvent) => {
+            if (e.keyCode == 13 || e.keyCode == 27) {
+                // return or escape
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+            return eventIntercept(_, e);
+        }
+        let keyupHandler = (_, e: KeyboardEvent) => {
+            if (e.keyCode == 13 || e.keyCode == 27) {
+                // return or escape
+                editFunc();
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+            return eventIntercept(_, e);
+        }
+        return {
+            attr: {
+                contenteditable: this.value
+            },
+            event: {
+                'blur': editFunc,
+                'keydown': keydownHandler,
+                'keyup': keyupHandler
+            }
+        };
+    }
+}
+
 export function registerAll() {
     DragTarget.register('dropzoneFor');
     ImageBinding.register('image');
     Draggable.register('draggable');
+    ContentEditable.register('contentEditable')
 }

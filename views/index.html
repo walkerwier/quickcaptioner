@@ -17,7 +17,8 @@
             <!-- /ko -->
             <!-- ko if: $root.proofMode -->
             <button data-bind="click: $root.discardEdits" class="solo">Discard edits</button>
-            <button data-bind="click: $root.exportProofedOutput" class="solo right">Export</button>
+            <button data-bind="click: $root.exportProofedOutput, visible: !$root.optionDepressed()" class="solo right">Export</button>
+            <button data-bind="click: $root.promptForPaddedOutput, visible: $root.optionDepressed" class="solo right">Export Padded</button>
             <!-- /ko -->
         </div>
         <div id="settings-container">
@@ -36,7 +37,7 @@
                             </div>
                             <div id="cursor" data-bind="style: {top: ''+(cursorPosition()*19)+'px',width: ''+(parseInt($root.settings.maxLength())+2)+'ch'}, visible: proofMode"></div>
                             <div id="content-table" data-bind="foreach: result">
-                                <div data-bind="text: $data || '\u00A0'"></div>
+                                <div data-bind="text: $data || '\u00A0', contentEditable: $root.proofMode, onEdit: $root.readbackLine.bind($data, $index)"></div>
                             </div>
                             <table id="annotation-table">
                                 <tbody data-bind="foreach: result">
